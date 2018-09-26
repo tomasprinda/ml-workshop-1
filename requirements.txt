@@ -1,0 +1,7 @@
+numpy
+click
+pandas
+sklearn
+scikit-learn
+jupyter
+# graphviz # by apt-get
