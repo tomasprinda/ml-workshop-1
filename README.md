@@ -7,8 +7,7 @@ cd ml-workshop-1
 docker build -t ml-workshop-1 .
 docker run -v $(pwd):/src -it -p 7777:7777 -p 8888:8888  ml-workshop-1
 ```
-Pokud je vše v pořádku měl by se vyklonovat projekt z GitHubu, vybuildit docker image a spustit docker container. 
-`$(pwd)` označuje absolutní cestu k adresáři d projektem.
+Pokud je vše v pořádku měl by se vyklonovat projekt z GitHubu, vybuildit docker image a spustit docker container na kterém bychom měli být připojení. `$(pwd)` označuje absolutní cestu k adresáři s projektem.
 
 Nádledně spustíme test pro ověření, že knihovny jsou správně nainstalované a data stažena.
 ```bash
