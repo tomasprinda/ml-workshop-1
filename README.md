@@ -21,6 +21,7 @@ jupyter notebook --port=8888
 
 Nakonec vyzkoušíme *flexp-browser* na adrese [http://localhost:7777/](http://localhost:7777/)
 ```bash
+cd experiments/
 flexp-browser --port 7777
 ```
 
