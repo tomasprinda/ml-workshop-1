@@ -1,6 +1,6 @@
 # Machine Learning Workshop: Obecný machine learning
 
-Jak otestovat že vše běží tak jak má?
+## Jak otestovat že vše běží tak jak má?
 ```bash
 git clone https://github.com/tomasprinda/ml-workshop-1.git
 cd ml-workshop-1
