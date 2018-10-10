@@ -52,6 +52,13 @@ RUN git clone https://github.com/seznam/flexp.git
 WORKDIR /flexp
 RUN python3 setup.py develop  
 
+# tputils
+WORKDIR /
+RUN git clone https://github.com/tomasprinda/tputils.git
+WORKDIR /tputils
+RUN python3 setup.py install  
+
+
 # Jupyter notebook
 EXPOSE 8888
 RUN mkdir /root/.jupyter/
