@@ -39,6 +39,7 @@ RUN pip3 install --upgrade click
 RUN pip3 install --upgrade pandas
 RUN pip3 install --upgrade scikit-learn
 RUN pip3 install --upgrade pytest
+RUN pip3 install --upgrade graphviz
 
 # Data
 # originally from https://www.kaggle.com/CooperUnion/cardataset
