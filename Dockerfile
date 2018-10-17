@@ -40,6 +40,7 @@ RUN pip3 install --upgrade pandas
 RUN pip3 install --upgrade scikit-learn
 RUN pip3 install --upgrade pytest
 RUN pip3 install --upgrade graphviz
+RUN pip3 install --upgrade xgboost
 
 # Data
 # originally from https://www.kaggle.com/CooperUnion/cardataset
