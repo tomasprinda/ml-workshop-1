@@ -30,23 +30,24 @@ def main(exp):
     df_train = pd.read_csv("data/data_clean_train.csv")
     df_dev = pd.read_csv("data/data_clean_dev.csv")
 
-    # Preprocess
+    # Preprocess - split data to x and y, keep x as pd.DataFrame
     logging.info("Preprocessing")
     df_x_train, y_train = xy_split(df_train)
     df_x_dev, y_dev = xy_split(df_dev)
 
     # Features
     feature_transformer = FeatureTransformer()
-    x_train = feature_transformer.fit_transform(df_x_train)
-    x_dev = feature_transformer.transform(df_x_dev)
+    x_train = feature_transformer.fit_transform(df_x_train)  # Fit parameters of transformers and transform x_train
+    x_dev = feature_transformer.transform(df_x_dev)  # Transformers already fitted, just transform x_dev
     feature_names = feature_transformer.get_feature_names()
 
-    # Impute
+    # Impute - fill missing values
     imputer = SimpleImputer(strategy="median")
     x_train = imputer.fit_transform(x_train)
     x_dev = imputer.transform(x_dev)
 
-    # Scale
+    # Scale - transforms columns to be around 0
+    # For some methods easier training, better results, for some methods worse
     features_to_scale = ["city mpg__", "Year__", "Number of Doors__"]
     scaler = FeatureScaler(StandardScaler(), feature_names, features_to_scale)
     x_train = scaler.fit_transform(x_train)
@@ -77,22 +78,30 @@ class FeatureTransformer(BaseEstimator, TransformerMixin):
         SimpleImputer.get_feature_names = get_empty_feature_names
         RobustScaler.get_feature_names = get_empty_feature_names
 
+        # Transformer which returns the same result
         identity = FunctionTransformer(func=lambda x: x, validate=False)
-        reciprocal = FunctionTransformer(func=lambda x: 1/x, validate=False)
+        # transformer 1/x
+        reciprocal = FunctionTransformer(func=lambda x: 1 / x, validate=False)
 
+        # ColumnTransformer allows different columns or column subsets of the input
+        # to be transformed separately and the results combined into a single
+        # feature space.
         self.col_transformer = ColumnTransformer(
             [
-                # categorical
+                # (name, transformer, column(s))
 
+                # ==categorical==
+                # OneHotEncoder - M categories in column -> M columns
                 ("Transmission Type", OneHotEncoder(), ["Transmission Type"]),
+                # OrdinalEncoder - encodes categories to integer
                 ("Vehicle Size", OrdinalEncoder([['Compact', 'Midsize', 'Large']]), ["Vehicle Size"]),
 
-                # numerical
-                ("Number of Doors", identity, ["Number of Doors"]),
-                ("city mpg", reciprocal, ["city mpg"]),
-                ("Year", identity, ["Year"]),
+                # ==numerical==
+                ("Number of Doors", identity, ["Number of Doors"]),  # Leave column as it is
+                ("city mpg", reciprocal, ["city mpg"]),  # calculate 1/x
+                ("Year", identity, ["Year"]),   # Leave column as it is
             ],
-            remainder='drop'
+            remainder='drop'  # Drop all other remaining columns
         )
 
     def fit(self, X):
@@ -114,14 +123,17 @@ class FeatureScaler(BaseEstimator, TransformerMixin):
         self.features_to_scale = features_to_scale
         self.feature_ind_to_scale = [i for i, name in enumerate(feature_names) if name in features_to_scale]
 
+        # Make sure I found indexes of all features_to_scale
         assert len(self.feature_ind_to_scale) == len(self.features_to_scale), \
             "{} {}".format(self.feature_ind_to_scale, self.features_to_scale)
 
     def fit(self, X):
+        # Fit only selected columns, indexed by list
         self.scaler.fit(X[:, self.feature_ind_to_scale])
         return self
 
     def transform(self, X):
+        # Scale selected columns and return scaled back to array
         X[:, self.feature_ind_to_scale] = self.scaler.transform(X[:, self.feature_ind_to_scale])
         return X
 
@@ -139,11 +151,11 @@ def eval_rmse(y_train, y_train_pred, y_dev, y_dev_pred):
 
 
 def eval_feature_importance(model, feature_names):
-
     if not hasattr(model, "feature_importances_"):
         logging.warning("Model doesn't have feature_importances_")
         return
 
+    # Sort feature_names and feature_importances by feature_importances, decreasing order
     feature_importance = sorted(
         zip(feature_names, model.feature_importances_),
         key=lambda x: x[1],
