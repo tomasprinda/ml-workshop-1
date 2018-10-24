@@ -9,8 +9,9 @@ from sklearn.base import TransformerMixin, BaseEstimator
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.impute import SimpleImputer
-from sklearn.linear_model import Ridge
+from sklearn.linear_model import Ridge, LinearRegression
 from sklearn.metrics import mean_squared_error
+from sklearn.model_selection import learning_curve
 from sklearn.preprocessing import OneHotEncoder, FunctionTransformer, StandardScaler, RobustScaler, MinMaxScaler
 from tputils import csv_dump
 from xgboost import XGBRegressor
@@ -23,7 +24,7 @@ from _encoders import OrdinalEncoder
 @click.command()
 @click.option('--exp', default="exp", help='Experiment folder')
 def main(exp):
-    flexp.setup("./experiments", exp, with_date=True, loglevel=logging.INFO, log_filename="experiment.log.txt")
+    flexp.setup("./experiments", exp, with_date=True, loglevel=logging.INFO)
 
     # Load
     logging.info("Loading data")
@@ -37,21 +38,30 @@ def main(exp):
 
     # Features
     feature_transformer = FeatureTransformer()
-    x_train = feature_transformer.fit_transform(df_x_train)  # Fit parameters of transformers and transform x_train
-    x_dev = feature_transformer.transform(df_x_dev)  # Transformers already fitted, just transform x_dev
+    # Fit parameters of transformers and transform x_train
+    x_train = feature_transformer.fit_transform(df_x_train)
+    # Transformers already fitted, just transform x_dev
+    x_dev = feature_transformer.transform(df_x_dev)
+    # x_train, x_dev is np.array now, we still want to know
+    # the names of features
     feature_names = feature_transformer.get_feature_names()
 
-    # Impute - fill missing values
+    # Impute - fill missing values with median of the column
     imputer = SimpleImputer(strategy="median")
     x_train = imputer.fit_transform(x_train)
     x_dev = imputer.transform(x_dev)
 
     # Scale - transforms columns to be around 0
     # For some methods easier training, better results, for some methods worse
-    features_to_scale = ["city mpg__", "Year__", "Number of Doors__"]
+    features_to_scale = ["city mpg trans__", "Year__", "Number of Doors__"]
     scaler = FeatureScaler(StandardScaler(), feature_names, features_to_scale)
     x_train = scaler.fit_transform(x_train)
     x_dev = scaler.transform(x_dev)
+
+    # Logging
+    # It is useful to log almost everything for easy debugging
+    logging.info("x_train.shape={} y_train.shape={}".format(x_train.shape, y_train.shape))
+    logging.info("x_dev.shape={} y_dev.shape={}".format(x_dev.shape, y_dev.shape))
 
     # Fit
     logging.info("Fitting")
@@ -64,8 +74,9 @@ def main(exp):
     y_dev_pred = model.predict(x_dev)
 
     eval_rmse(y_train, y_train_pred, y_dev, y_dev_pred)
-    eval_feature_importance(model, feature_names)
-    plot_histograms(x_train, feature_names)
+    # eval_feature_importance(model, feature_names)
+    # plot_histograms(x_train, feature_names)
+    # plot_learning_curve(model, x_train, y_train, x_dev, y_dev)
 
 
 class FeatureTransformer(BaseEstimator, TransformerMixin):
@@ -91,15 +102,23 @@ class FeatureTransformer(BaseEstimator, TransformerMixin):
                 # (name, transformer, column(s))
 
                 # ==categorical==
+
                 # OneHotEncoder - M categories in column -> M columns
                 ("Transmission Type", OneHotEncoder(), ["Transmission Type"]),
+
                 # OrdinalEncoder - encodes categories to integer
                 ("Vehicle Size", OrdinalEncoder([['Compact', 'Midsize', 'Large']]), ["Vehicle Size"]),
 
                 # ==numerical==
-                ("Number of Doors", identity, ["Number of Doors"]),  # Leave column as it is
-                ("city mpg", reciprocal, ["city mpg"]),  # calculate 1/x
-                ("Year", identity, ["Year"]),   # Leave column as it is
+
+                # Leave column as it is
+                ("Number of Doors", identity, ["Number of Doors"]),
+
+                # calculate 1/x
+                ("city mpg trans", reciprocal, ["city mpg"]),
+
+                # Leave column as it is
+                ("Year", identity, ["Year"]),
             ],
             remainder='drop'  # Drop all other remaining columns
         )
@@ -121,7 +140,9 @@ class FeatureScaler(BaseEstimator, TransformerMixin):
         self.scaler = scaler
         self.feature_names = feature_names
         self.features_to_scale = features_to_scale
-        self.feature_ind_to_scale = [i for i, name in enumerate(feature_names) if name in features_to_scale]
+        self.feature_ind_to_scale = [
+            i for i, name in enumerate(feature_names) if name in features_to_scale
+        ]
 
         # Make sure I found indexes of all features_to_scale
         assert len(self.feature_ind_to_scale) == len(self.features_to_scale), \
@@ -138,9 +159,13 @@ class FeatureScaler(BaseEstimator, TransformerMixin):
         return X
 
 
+def rmse(y_true, y_predict):
+    return np.sqrt(mean_squared_error(y_true, y_predict))
+
+
 def eval_rmse(y_train, y_train_pred, y_dev, y_dev_pred):
-    rmse_train = np.sqrt(mean_squared_error(y_train, y_train_pred))
-    rmse_dev = np.sqrt(mean_squared_error(y_dev, y_dev_pred))
+    rmse_train = rmse(y_train, y_train_pred)
+    rmse_dev = rmse(y_dev, y_dev_pred)
 
     file = flexp.get_file_path("metrics.csv")
     header = ["metric", "trainset", "devset"]
@@ -186,6 +211,46 @@ def plot_histograms(x_train, feature_names):
         plt.title("Histogram {}".format(feature_name))
         plt.savefig(flexp.get_file_path("histogram_{:02d}".format(i)))
         plt.clf()
+
+
+def plot_learning_curve(model, x_train, y_train, x_dev, y_dev):
+    # Generates numpy array with 10 elements equaly distrinuted in <0.0, 1.0>
+    nr_train_sizes = 10
+    train_sizes = np.linspace(start=0.2, stop=1., num=nr_train_sizes)
+
+    # sklearn.learning_curve() is internally using cross-validation so we join train and dev sets
+    x_all = np.concatenate([x_train, x_dev], axis=0)
+    y_all = np.concatenate((y_train, y_dev), axis=0)
+
+    # For each element of train a model with that part of train set
+    # evaluated by cross-validation
+    train_sizes_abs, train_scores, dev_scores = learning_curve(
+        model,
+        x_all,
+        y_all,
+        train_sizes=train_sizes,
+        scoring=rmse_scorer,
+    )
+
+    # xxx_scores is calculated for each train_size and each cross-validation fold
+    # xxx_scores.shape = (nr_train_sizes, nr_cv_folds)
+    # We want average across all folds
+    train_scores = np.mean(train_scores, axis=1)
+    dev_scores = np.mean(dev_scores, axis=1)
+
+    # Plot it
+    plt.plot(train_sizes_abs, np.stack([train_scores, dev_scores], axis=1))
+    plt.title("Learning curve")
+    plt.xlabel("Nr train examples")
+    plt.ylabel("RMSE")
+    plt.legend(["trainset", "devset(cv)"])
+    plt.savefig(flexp.get_file_path("learning_curve.png"))
+    plt.close()
+
+
+def rmse_scorer(model, x, y_true):
+    y_pred = model.predict(x)
+    return rmse(y_true, y_pred)
 
 
 # Ugly but otherwise col_transformer.feature_names() doesn't work
