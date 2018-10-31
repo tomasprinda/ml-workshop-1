@@ -25,7 +25,7 @@ from _encoders import OrdinalEncoder
 @click.command()
 @click.option('--exp', default="exp", help='Experiment folder')
 def main(exp):
-    flexp.setup("./experiments", exp, with_date=True, loglevel=logging.INFO)
+    flexp.setup("./experiments", exp, with_date=False, loglevel=logging.INFO, override_dir=True)
 
     # Load
     logging.info("Loading data")
