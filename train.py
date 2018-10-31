@@ -15,6 +15,7 @@ from sklearn.model_selection import learning_curve
 from sklearn.preprocessing import OneHotEncoder, FunctionTransformer, StandardScaler, RobustScaler, MinMaxScaler
 from tputils import csv_dump
 from xgboost import XGBRegressor
+from pdpbox import pdp, get_dataset, info_plots
 
 # Used due to bug https://github.com/scikit-learn/scikit-learn/issues/12365
 # Can be removed in sklearn=0.20.1
@@ -53,7 +54,7 @@ def main(exp):
 
     # Scale - transforms columns to be around 0
     # For some methods easier training, better results, for some methods worse
-    features_to_scale = ["city mpg trans__", "Year__", "Number of Doors__"]
+    features_to_scale = ["city mpg trans__", "Year__", "Number of Doors__", "Engine HP__"]
     scaler = FeatureScaler(StandardScaler(), feature_names, features_to_scale)
     x_train = scaler.fit_transform(x_train)
     x_dev = scaler.transform(x_dev)
@@ -74,7 +75,8 @@ def main(exp):
     y_dev_pred = model.predict(x_dev)
 
     eval_rmse(y_train, y_train_pred, y_dev, y_dev_pred)
-    # eval_feature_importance(model, feature_names)
+    eval_feature_importance(model, feature_names, x_dev, y_dev)
+    eval_pdp(model, x_dev, feature_names)
     # plot_histograms(x_train, feature_names)
     # plot_learning_curve(model, x_train, y_train, x_dev, y_dev)
 
@@ -113,6 +115,7 @@ class FeatureTransformer(BaseEstimator, TransformerMixin):
 
                 # Leave column as it is
                 ("Number of Doors", identity, ["Number of Doors"]),
+                ("Engine HP", identity, ["Engine HP"]),
 
                 # calculate 1/x
                 ("city mpg trans", reciprocal, ["city mpg"]),
@@ -175,20 +178,72 @@ def eval_rmse(y_train, y_train_pred, y_dev, y_dev_pred):
     logging.info(", ".join(row))
 
 
-def eval_feature_importance(model, feature_names):
+def eval_feature_importance(model, feature_names, x_dev, y_dev_true):
     if not hasattr(model, "feature_importances_"):
         logging.warning("Model doesn't have feature_importances_")
         return
 
+    perm_importances = score_permutation_importance(model, x_dev, y_dev_true)
+
     # Sort feature_names and feature_importances by feature_importances, decreasing order
     feature_importance = sorted(
-        zip(feature_names, model.feature_importances_),
+        zip(feature_names, model.feature_importances_, perm_importances),
         key=lambda x: x[1],
         reverse=True
     )
-    header = ["feature name", "feature importance"]
+    header = ["feature name", "feature importance", "permutation importance"]
     file = flexp.get_file_path("feature_importance.csv")
     csv_dump([header] + feature_importance, file)
+
+
+def score_permutation_importance(model, x_dev, y_dev_true):
+    """
+    Permutation importance (PI) tells us which features are important and which not so much.
+    PI is calculated for trained model and dev set.
+    For feature i PI is calculated by shuffling feature column i and calculates the score.
+    The difference between shuffled and original score (then normed by original score) is PI
+    for feature i
+    :param model:
+    :param x_dev: dev set
+    :param y_dev_true: labels
+    :return list[float]:
+    """
+    base_score = rmse_scorer(model, x_dev, y_dev_true)
+
+    importances = []
+
+    nr_features = x_dev.shape[1]
+    for i in range(nr_features):
+        x_dev_copy = x_dev[:]
+        np.random.shuffle(x_dev_copy[:, i])
+
+        perm_score = rmse_scorer(model, x_dev_copy, y_dev_true)
+        importance = (perm_score - base_score) / base_score
+        importances.append(importance)
+
+    return importances
+
+
+def eval_pdp(model, x_dev, feature_names):
+    # https://www.kaggle.com/dansbecker/partial-plots
+
+    # pdp_isolate requires the data to be DataFrame so wrap it
+    df_x_dev = pd.DataFrame(x_dev, columns=feature_names)
+
+    for feature in feature_names:
+        # Create the data that we will plot
+        pdp_values = pdp.pdp_isolate(
+            model=model,
+            dataset=df_x_dev,
+            model_features=feature_names,
+            feature=feature,
+            num_grid_points=100
+        )
+
+        # plot it
+        pdp.pdp_plot(pdp_values, feature)
+        plt.savefig(flexp.get_file_path("pdp_{}.png".format(feature)))
+        plt.clf()
 
 
 def xy_split(df):

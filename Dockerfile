@@ -41,6 +41,9 @@ RUN pip3 install --upgrade scikit-learn
 RUN pip3 install --upgrade pytest
 RUN pip3 install --upgrade graphviz
 RUN pip3 install --upgrade xgboost
+RUN pip3 install --upgrade scikit-surprise
+RUN pip3 install --upgrade pdpbox
+RUN pip3 install --upgrade shap
 
 # Data
 # originally from https://www.kaggle.com/CooperUnion/cardataset
