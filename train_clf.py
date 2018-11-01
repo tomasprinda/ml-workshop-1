@@ -36,13 +36,13 @@ def main(exp):
     # encode='ordinal' means we want output to be 0, 1, 2, other option is onehot
     # strategy="quantile" means we want in each class the same number of examples
     # other options are "uniform" or "kmeans"
-    enc = KBinsDiscretizer(n_bins=2, encode='ordinal', strategy="quantile")
+    enc = KBinsDiscretizer(n_bins=3, encode='ordinal', strategy="quantile")
     # ravel() transforms to 1D and astype to integer
     y_train = enc.fit_transform(y_train).ravel().astype(np.int)
     y_dev = enc.transform(y_dev).ravel().astype(np.int)
 
     # converts the class ids to readable format - string
-    class_names = ["cheap", "expensive"]
+    class_names = ["cheap", "middle class", "expensive"]
     y_train = transform_labels(y_train, class_names)
     y_dev = transform_labels(y_dev, class_names)
 
@@ -103,10 +103,10 @@ def eval_metrics(y_train, y_train_pred, y_dev, y_dev_pred):
     # average='weighted', omit pos_label
     #
     precision_train, recall_train, f1_train, _ = precision_recall_fscore_support(
-        y_train, y_train_pred,  average='binary', pos_label='expensive'
+        y_train, y_train_pred,  average='weighted'
     )
     precision_dev, recall_dev, f1_dev, _ = precision_recall_fscore_support(
-        y_dev, y_dev_pred,  average='binary', pos_label='expensive'
+        y_dev, y_dev_pred,  average='weighted'
     )
 
     # Print the metrics to csv file
