@@ -44,6 +44,10 @@ RUN pip3 install --upgrade xgboost
 RUN pip3 install --upgrade scikit-surprise
 RUN pip3 install --upgrade pdpbox
 RUN pip3 install --upgrade shap
+RUN pip3 install --upgrade torch
+RUN pip3 install --upgrade torchvision 
+RUN pip3 install --upgrade bokeh 
+
 
 # Data
 # originally from https://www.kaggle.com/CooperUnion/cardataset
